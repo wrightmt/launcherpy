@@ -27,7 +27,7 @@ class readHostThread(QThread):
 
                 else:
                     MainWindow.statusBar.showMessage("Online - Getting info...")
-                    computerCPUThread.start(self)
+                    MainWindow.computerCPU.start()
 
                 self.exiting=True
                 self.signal.sig.emit('OK')
@@ -39,8 +39,10 @@ class computerCPUThread(QThread):
                 self.exiting = False
 
         def run(self):
+                hostname = readHostThread.currentHost
                 while self.exiting == False:
-                        cpuload = subprocess.Popen(["wmic", "/node:"[readHostThread.currentHost], "cpu", "get", "loadpercentage"], shell=True, stdout=subprocess.PIPE)
+                        print "start cpu thread"
+                        cpuload = subprocess.Popen(["wmic", "/node:", hostname, "cpu", "get", "loadpercentage"], shell=True, stdout=subprocess.PIPE)
                         cpuload.wait()
                         response = cpuload.returncode
                         print response
@@ -51,7 +53,7 @@ class computerCPUThread(QThread):
                         cpuresult = cpuload.stdout.read()
                         print cpuresult
                         cpuInt = re.findall('\d+', cpuresult)
-                        print cpuInt
+                        cpuInt = str(cpuInt)
                         MainWindow.computerCPUResult.setText(cpuInt)
                 self.exiting = True
                 self.signal.sig.emit('OK')
@@ -65,15 +67,15 @@ class MainWindow(QWidget):
                 self.setWindowTitle('LauncherPy v1.0')
                 # Fonts
                 statusFont = QFont('Serif', 11, QFont.Light)
-                labelFont = QFont('Serif', 12, QFont.Light)
+                MainWindow.labelFont = QFont('Serif', 12, QFont.Light)
                 resultFont = QFont('Serif', 12, QFont.Light)
-                statusFont = QFont('Serif', 8, QFont.Light)
+                MainWindow.statusFont = QFont('Serif', 8, QFont.Light)
                 hostFont = QFont('Serif', 11, QFont.Light)
                 hostFont.setCapitalization(QFont.AllUppercase)
                 # Set widgets - labels and edit boxes
                 # Host widgets
                 self.hostLabel = QLabel('Hostname')
-                self.hostLabel.setFont(labelFont)
+                self.hostLabel.setFont(MainWindow.labelFont)
                 MainWindow.hostCombo = QComboBox()
                 self.hostCombo.setFont(hostFont)
                 self.hostCombo.setEditable(True)
@@ -100,41 +102,42 @@ class MainWindow(QWidget):
                 #
                 # Computer widgets
                 self.computerModelLabel = QLabel('Model')
-                self.computerModelLabel.setFont(labelFont)
+                self.computerModelLabel.setFont(MainWindow.labelFont)
                 self.computerModelResult = QLineEdit()
                 self.computerModelResult.setFont(resultFont)
                 #
                 self.computerSerialLabel = QLabel('Serial')
-                self.computerSerialLabel.setFont(labelFont)
+                self.computerSerialLabel.setFont(MainWindow.labelFont)
                 self.computerSerialResult = QLineEdit()
                 self.computerSerialResult.setFont(resultFont)
                 #
                 self.computerIPAddressLabel = QLabel('IP')
-                self.computerIPAddressLabel.setFont(labelFont)
+                self.computerIPAddressLabel.setFont(MainWindow.labelFont)
                 self.computerIPAddressResult = QLineEdit()
                 self.computerIPAddressResult.setFont(resultFont)
                 #
                 self.computerMACAddressLabel = QLabel('MAC')
-                self.computerMACAddressLabel.setFont(labelFont)
+                self.computerMACAddressLabel.setFont(MainWindow.labelFont)
                 self.computerMACAddressResult = QLineEdit()
                 self.computerMACAddressResult.setFont(resultFont)
                 #
                 self.computerOSVersionLabel = QLabel('OS')
-                self.computerOSVersionLabel.setFont(labelFont)
+                self.computerOSVersionLabel.setFont(MainWindow.labelFont)
                 self.computerOSVersionResult = QLineEdit()
                 self.computerOSVersionResult.setFont(resultFont)
                 #
                 self.computerUpTimeLabel = QLabel('UpTime')
-                self.computerUpTimeLabel.setFont(labelFont)
+                self.computerUpTimeLabel.setFont(MainWindow.labelFont)
                 self.computerUpTimeResult = QLineEdit()
                 self.computerUpTimeResult.setFont(resultFont)
                 #
-                self.computerCPULabel = QLabel('CPU')
-                self.computerCPULabel.setFont(statusFont)
-                self.computerCPULabel.setAlignment(Qt.AlignRight)
-                self.computerCPUResult = QLabel('00%')
-                self.computerCPUResult.setFont(statusFont)
-                self.computerCPUResult.setAlignment(Qt.AlignRight)
+                MainWindow.computerCPU = computerCPUThread()
+                MainWindow.computerCPULabel = QLabel('CPU')
+                MainWindow.computerCPULabel.setFont(statusFont)
+                MainWindow.computerCPULabel.setAlignment(Qt.AlignRight)
+                MainWindow.computerCPUResult = QLabel('00%')
+                MainWindow.computerCPUResult.setFont(MainWindow.statusFont)
+                MainWindow.computerCPUResult.setAlignment(Qt.AlignRight)
                 #
                 self.computerMEMLabel = QLabel('MEM')
                 self.computerMEMLabel.setFont(statusFont)
@@ -245,6 +248,7 @@ class MainWindow(QWidget):
             if not self.readHost.isRunning():
                 self.readHost.exiting = False
                 self.readHost.start()
+                #self.computerCPU.start()
                 self.statusBar.showMessage('Pinging...')
                 self.readHostButton.setEnabled(False)
 
