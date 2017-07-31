@@ -26,22 +26,35 @@ class readHostThread(QThread):
                     MainWindow.statusBar.showMessage("Offline")
 
                 else:
-                    MainWindow.statusBar.showMessage("Online - Trying WMI...")
-                    #self.getwmi()
+                    MainWindow.statusBar.showMessage("Online - Getting info...")
+                    computerCPUThread.start(self)
 
                 self.exiting=True
                 self.signal.sig.emit('OK')
 
-class readUserThread(QThread):
-        def __init__(self, parent = None):
+
+class computerCPUThread(QThread):
+        def __init__(self, parent=None):
                 QThread.__init__(self, parent)
                 self.exiting = False
 
         def run(self):
-                while self.exiting==False:
-                        sys.stdout.write('.')
-                        sys.stdout.flush()
-                        time.sleep(1)
+                while self.exiting == False:
+                        cpuload = subprocess.Popen(["wmic", "/node:"[readHostThread.currentHost], "cpu", "get", "loadpercentage"], shell=True, stdout=subprocess.PIPE)
+                        cpuload.wait()
+                        response = cpuload.returncode
+                        print response
+                        if response == 0:
+                                MainWindow.computerCPULabel.setFont(MainWindow.labelFont)
+                        else:
+                                MainWindow.computerCPULabel.setFont(MainWindow.hostFont)
+                        cpuresult = cpuload.stdout.read()
+                        print cpuresult
+                        cpuInt = re.findall('\d+', cpuresult)
+                        print cpuInt
+                        MainWindow.computerCPUResult.setText(cpuInt)
+                self.exiting = True
+                self.signal.sig.emit('OK')
 
 class MainWindow(QWidget):
         def __init__(self, parent=None):
@@ -232,11 +245,11 @@ class MainWindow(QWidget):
             if not self.readHost.isRunning():
                 self.readHost.exiting = False
                 self.readHost.start()
-                self.statusBar.showMessage('Retrieving host info')
+                self.statusBar.showMessage('Pinging...')
                 self.readHostButton.setEnabled(False)
 
         def readHostComplete(self):
-            self.statusBar.showMessage('Complete')
+            #self.statusBar.showMessage('Complete')
             self.readHostButton.setEnabled(True)
 
         @Slot()
