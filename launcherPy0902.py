@@ -28,15 +28,38 @@ class readHostThread(QThread):
                 else:
                     MainWindow.statusBar.showMessage("Online - Getting info...")
                     MainWindow.computerCPU.start()
+                    MainWindow.computerMEM.start()
+                    MainWindow.readUser.start()
 
                 self.exiting=True
                 self.signal.sig.emit('OK')
 
 
+class readUserThread(QThread):
+    def __init__(self, parent=None):
+        QThread.__init__(self, parent)
+        self.exiting = False
+        self.signal = MySignal()
+
+    def run(self):
+        hostname = readHostThread.currentHost
+        while self.exiting == False:
+            currentUser = subprocess.Popen(["wmic", "/node:", hostname, "ComputerSystem", "get", "Username"], shell=True,stdout=subprocess.PIPE)
+            currentUser.wait()
+            #response = currentUser.returncode
+            currentUserData = currentUser.stdout.read()
+            print currentUserData
+            currentUserData = currentUserData.rpartition('\\')[-1]
+            print currentUserData
+            MainWindow.userEdit.setText(currentUserData)
+            #self.signal.sig.emit('OK')
+            self.exiting = True
+
 class computerCPUThread(QThread):
         def __init__(self, parent=None):
                 QThread.__init__(self, parent)
                 self.exiting = False
+                self.signal = MySignal()
 
         def run(self):
                 hostname = readHostThread.currentHost
@@ -47,16 +70,67 @@ class computerCPUThread(QThread):
                         response = cpuload.returncode
                         print response
                         if response == 0:
-                                MainWindow.computerCPULabel.setFont(MainWindow.labelFont)
+                                MainWindow.computerCPULabel.setFont(MainWindow.statusFontBold)
                         else:
                                 MainWindow.computerCPULabel.setFont(MainWindow.hostFont)
                         cpuresult = cpuload.stdout.read()
                         print cpuresult
                         cpuInt = re.findall('\d+', cpuresult)
+                        cpuInt = " ".join (cpuInt)
                         cpuInt = str(cpuInt)
                         MainWindow.computerCPUResult.setText(cpuInt)
-                self.exiting = True
+                        if MainWindow.computerCPUCheckbox.isChecked() == True:
+                            self.exiting = False
+                        else:
+                            self.exiting = True
                 self.signal.sig.emit('OK')
+                self.exiting = False
+
+
+class computerMEMThread(QThread):
+    def __init__(self, parent=None):
+        QThread.__init__(self, parent)
+        self.exiting = False
+        self.signal = MySignal()
+
+    def run(self):
+        hostname = readHostThread.currentHost
+        while self.exiting == False:
+            totalmem = subprocess.Popen(["wmic", "/node:", hostname, "ComputerSystem", "get", "TotalPhysicalMemory"], shell=True,stdout=subprocess.PIPE)
+            totalmem.wait()
+            response = totalmem.returncode
+            print response
+            if response == 0:
+                MainWindow.computerMEMLabel.setFont(MainWindow.statusFont)
+            else:
+                MainWindow.computerMEMLabel.setFont(MainWindow.hostFont)
+            totalmemresult = totalmem.stdout.read()
+            totalmemInt = re.findall('\d+', totalmemresult)
+            totalmemInt = " ".join (totalmemInt)
+            totalmemInt = int(totalmemInt)
+            totalmemInt = totalmemInt/1024/1024
+            totalmemInt = str(totalmemInt)
+            print totalmemInt
+            availmem = subprocess.Popen(["wmic", "/node:", hostname, "OS", "get", "FreePhysicalMemory"],
+                                        shell=True, stdout=subprocess.PIPE)
+            availmem.wait()
+            response = availmem.returncode
+            if response == 0:
+                MainWindow.computerMEMLabel.setFont(MainWindow.statusFontBold)
+            else:
+                #MainWindow.computerMEMLabel.setBackground(QColor(6,253,60))
+                self.exiting = True
+            availmemresult = availmem.stdout.read()
+            availmemInt = re.findall('\d+', availmemresult)
+            availmemInt = " ".join(availmemInt)
+            availmemInt = int(availmemInt)
+            availmemInt = availmemInt / 1024
+            availmemInt = str(availmemInt)
+            MainWindow.computerMEMResult.setText(availmemInt + '/' + totalmemInt+'MB')
+            self.exiting = True
+        self.signal.sig.emit('OK')
+        self.exiting = False
+
 
 class MainWindow(QWidget):
         def __init__(self, parent=None):
@@ -70,14 +144,15 @@ class MainWindow(QWidget):
                 MainWindow.labelFont = QFont('Serif', 12, QFont.Light)
                 resultFont = QFont('Serif', 12, QFont.Light)
                 MainWindow.statusFont = QFont('Serif', 8, QFont.Light)
-                hostFont = QFont('Serif', 11, QFont.Light)
-                hostFont.setCapitalization(QFont.AllUppercase)
+                MainWindow.statusFontBold = QFont('Serif', 8, QFont.Bold)
+                MainWindow.hostFont = QFont('Serif', 11, QFont.Light)
+                MainWindow.hostFont.setCapitalization(QFont.AllUppercase)
                 # Set widgets - labels and edit boxes
                 # Host widgets
                 self.hostLabel = QLabel('Hostname')
                 self.hostLabel.setFont(MainWindow.labelFont)
                 MainWindow.hostCombo = QComboBox()
-                self.hostCombo.setFont(hostFont)
+                self.hostCombo.setFont(MainWindow.hostFont)
                 self.hostCombo.setEditable(True)
                 self.readHostButton = QPushButton('Go')
                 self.readHostButton.clicked.connect(self.readHostOperation)
@@ -90,9 +165,10 @@ class MainWindow(QWidget):
                 #
                 # User widgets
                 self.userButton = QPushButton('User')
-                self.userButton.clicked.connect(self.readUser)
-                self.userEdit = QLineEdit()
-                self.userEdit.setFont(resultFont)
+                #self.userButton.clicked.connect(MainWindow.readUser()
+                MainWindow.userEdit = QLineEdit()
+                MainWindow.userEdit.setFont(resultFont)
+                MainWindow.readUser = readUserThread()
                 #self.readUser = readUserThread()
                 #
                 self.fullNameButton = QPushButton('Name')
@@ -132,19 +208,23 @@ class MainWindow(QWidget):
                 self.computerUpTimeResult.setFont(resultFont)
                 #
                 MainWindow.computerCPU = computerCPUThread()
+                MainWindow.computerCPU.signal.sig.connect(self.computerCPUComplete)
                 MainWindow.computerCPULabel = QLabel('CPU')
-                MainWindow.computerCPULabel.setFont(statusFont)
+                MainWindow.computerCPULabel.setFont(MainWindow.statusFont)
                 MainWindow.computerCPULabel.setAlignment(Qt.AlignRight)
                 MainWindow.computerCPUResult = QLabel('00%')
                 MainWindow.computerCPUResult.setFont(MainWindow.statusFont)
                 MainWindow.computerCPUResult.setAlignment(Qt.AlignRight)
+                MainWindow.computerCPUCheckbox = QCheckBox()
                 #
-                self.computerMEMLabel = QLabel('MEM')
-                self.computerMEMLabel.setFont(statusFont)
-                self.computerMEMLabel.setAlignment(Qt.AlignRight)
-                self.computerMEMResult = QLabel('0/0MB')
-                self.computerMEMResult.setFont(statusFont)
-                self.computerMEMResult.setAlignment(Qt.AlignRight)
+                MainWindow.computerMEM = computerMEMThread()
+                MainWindow.computerMEM.signal.sig.connect(self.computerCPUComplete)
+                MainWindow.computerMEMLabel = QLabel('MEM')
+                MainWindow.computerMEMLabel.setFont(MainWindow.statusFont)
+                MainWindow.computerMEMLabel.setAlignment(Qt.AlignRight)
+                MainWindow.computerMEMResult = QLabel('0/0MB')
+                MainWindow.computerMEMResult.setFont(MainWindow.statusFont)
+                MainWindow.computerMEMResult.setAlignment(Qt.AlignRight)
                 #
                 # Command widgets
                 #
@@ -222,6 +302,7 @@ class MainWindow(QWidget):
                 grid.addWidget(self.computerUpTimeLabel, 9, 0)
                 grid.addWidget(self.computerUpTimeResult, 9, 1, 1, 3)
                 grid.addWidget(self.computerCPULabel, 10, 2)
+                grid.addWidget(MainWindow.computerCPUCheckbox, 10,2)
                 grid.addWidget(self.computerCPUResult, 11, 2)
                 grid.addWidget(self.computerMEMLabel, 10, 3)
                 grid.addWidget(self.computerMEMResult, 11, 3)
@@ -255,6 +336,10 @@ class MainWindow(QWidget):
         def readHostComplete(self):
             #self.statusBar.showMessage('Complete')
             self.readHostButton.setEnabled(True)
+
+        def computerCPUComplete(self):
+            #self.statusBar.showMessage('Complete')
+            MainWindow.computerCPUResult.setText('00')
 
         @Slot()
         def readHostHistory(self):
