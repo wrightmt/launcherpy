@@ -1,6 +1,8 @@
 import sys, time, re, os
 from PySide.QtGui import *
 from PySide.QtCore import *
+from datetime import *
+from dateutil.parser import parse
 import subprocess
 
 class MySignal(QObject):
@@ -161,10 +163,45 @@ class computerModelThread(QThread):
             getMAC = subprocess.Popen(["getmac", "/s", hostname, "/NH", "/FO", "table"], shell=True,stdout=subprocess.PIPE)
             getMAC.wait()
             getMAC = getMAC.stdout.read()
-            getMAC = re.findall(r'SerialNumber\s*(.*?)\r\r\n', getMAC)
             getMAC = str(getMAC)
-            getMAC = getMAC.strip("['']")
+            getMAC = getMAC.split(' ', 1)[0]
+            getMAC = getMAC.strip()
             MainWindow.computerMACResult.setText(getMAC)
+            ###WMIC BLOCK####
+            ###WMIC BLOCK####
+            getOSCaption = subprocess.Popen(["wmic", "/node:", hostname, "os", "get", "Caption"], shell=True,stdout=subprocess.PIPE)
+            getOSCaption.wait()
+            getOSCaption = getOSCaption.stdout.read()
+            getOSCaption = str(getOSCaption)
+            getOSCaption = getOSCaption.split(' ', 1)[1]
+            getOSCaption = getOSCaption.strip()
+            getOSArch = subprocess.Popen(["wmic", "/node:", hostname, "os", "get", "OSArchitecture"], shell=True,stdout=subprocess.PIPE)
+            getOSArch.wait()
+            getOSArch = getOSArch.stdout.read()
+            getOSArch = str(getOSArch)
+            getOSArch = getOSArch.split(' ', 1)[1]
+            getOSArch = getOSArch.strip()
+            getOSBuildNumber = subprocess.Popen(["wmic", "/node:", hostname, "os", "get", "BuildNumber"], shell=True,stdout=subprocess.PIPE)
+            getOSBuildNumber.wait()
+            getOSBuildNumber = getOSBuildNumber.stdout.read()
+            getOSBuildNumber = str(getOSBuildNumber)
+            getOSBuildNumber = getOSBuildNumber.split(' ', 1)[1]
+            getOSBuildNumber = getOSBuildNumber.strip()
+            computerOSString = getOSCaption +' '+ getOSArch +' '+ getOSBuildNumber
+            print computerOSString
+            MainWindow.computerOSVersionResult.setText(computerOSString)
+            #http://www.lfd.uci.edu/~gohlke/pythonlibs/#python-dateutil
+            getUpTime = subprocess.Popen(["wmic", "/node:", hostname, "os", "get", "LastBootUpTime"], shell=True,stdout=subprocess.PIPE)
+            getUpTime.wait()
+            getUpTime = getUpTime.stdout.read()
+            now = datetime.now()
+            boot = getUpTime
+            boot = str(boot)
+            boot = boot.split('.')[0]
+            boot = parse(boot, fuzzy=True)
+            totuptime = str(now - boot)
+            totuptime = totuptime.split('.')[0]
+            MainWindow.computerUpTimeResult.setText(totuptime)
             ###WMIC BLOCK####
             #self.signal.sig.emit('OK')
             self.exiting = True
@@ -225,7 +262,8 @@ class MainWindow(QWidget):
                 # Fonts
                 statusFont = QFont('Serif', 11, QFont.Light)
                 MainWindow.labelFont = QFont('Serif', 12, QFont.Light)
-                resultFont = QFont('Serif', 12, QFont.Light)
+                MainWindow.resultFont = QFont('Serif', 12, QFont.Light)
+                MainWindow.smallresultFont = QFont('Serif', 10, QFont.Light)
                 MainWindow.statusFont = QFont('Serif', 8, QFont.Light)
                 MainWindow.statusFontBold = QFont('Serif', 8, QFont.Bold)
                 MainWindow.hostFont = QFont('Serif', 11, QFont.Light)
@@ -250,7 +288,7 @@ class MainWindow(QWidget):
                 self.userButton = QPushButton('User')
                 #self.userButton.clicked.connect(MainWindow.readUser()
                 MainWindow.userEdit = QLineEdit()
-                MainWindow.userEdit.setFont(resultFont)
+                MainWindow.userEdit.setFont(MainWindow.resultFont)
                 MainWindow.readUser = readUserThread()
                 #self.userDetailButton = QPushButton('Details')
                 #self.userDetailButton.clicked.connect(self.readFullNameOperation)
@@ -269,40 +307,40 @@ class MainWindow(QWidget):
                 self.fullNameButton = QPushButton('Name')
                 self.fullNameButton.clicked.connect(self.readFullName)
                 MainWindow.fullNameEdit = QLineEdit()
-                MainWindow.fullNameEdit.setFont(resultFont)
+                MainWindow.fullNameEdit.setFont(MainWindow.resultFont)
                 #
                 # Computer widgets
                 self.computerModelLabel = QLabel('Model')
                 self.computerModelLabel.setFont(MainWindow.labelFont)
                 MainWindow.computerModelResult = QLineEdit()
-                MainWindow.computerModelResult.setFont(resultFont)
+                MainWindow.computerModelResult.setFont(MainWindow.resultFont)
                 MainWindow.computerModel = computerModelThread()
                 #self.computerModel.signal.sig.connect(self.computerModelComplete)
                 #
                 self.computerSerialLabel = QLabel('Serial')
                 self.computerSerialLabel.setFont(MainWindow.labelFont)
                 MainWindow.computerSerialResult = QLineEdit()
-                MainWindow.computerSerialResult.setFont(resultFont)
+                MainWindow.computerSerialResult.setFont(MainWindow.resultFont)
                 #
                 self.computerIPAddressLabel = QLabel('IP')
                 self.computerIPAddressLabel.setFont(MainWindow.labelFont)
                 self.computerIPAddressResult = QLineEdit()
-                self.computerIPAddressResult.setFont(resultFont)
+                self.computerIPAddressResult.setFont(MainWindow.resultFont)
                 #
                 self.computerMACAddressLabel = QLabel('MAC')
                 self.computerMACAddressLabel.setFont(MainWindow.labelFont)
                 MainWindow.computerMACResult = QLineEdit()
-                self.computerMACResult.setFont(resultFont)
+                self.computerMACResult.setFont(MainWindow.resultFont)
                 #
                 self.computerOSVersionLabel = QLabel('OS')
                 self.computerOSVersionLabel.setFont(MainWindow.labelFont)
-                self.computerOSVersionResult = QLineEdit()
-                self.computerOSVersionResult.setFont(resultFont)
+                MainWindow.computerOSVersionResult = QLineEdit()
+                self.computerOSVersionResult.setFont(MainWindow.smallresultFont)
                 #
                 self.computerUpTimeLabel = QLabel('UpTime')
                 self.computerUpTimeLabel.setFont(MainWindow.labelFont)
-                self.computerUpTimeResult = QLineEdit()
-                self.computerUpTimeResult.setFont(resultFont)
+                MainWindow.computerUpTimeResult = QLineEdit()
+                self.computerUpTimeResult.setFont(MainWindow.resultFont)
                 #
                 MainWindow.computerCPU = computerCPUThread()
                 MainWindow.computerCPU.signal.sig.connect(self.computerCPUComplete)
@@ -398,9 +436,9 @@ class MainWindow(QWidget):
                 grid.addWidget(self.computerMACAddressLabel, 7, 0)
                 grid.addWidget(MainWindow.computerMACResult, 7, 1, 1, 3)
                 grid.addWidget(self.computerOSVersionLabel, 8, 0)
-                grid.addWidget(self.computerOSVersionResult, 8, 1, 1, 3)
+                grid.addWidget(MainWindow.computerOSVersionResult, 8, 1, 1, 3)
                 grid.addWidget(self.computerUpTimeLabel, 9, 0)
-                grid.addWidget(self.computerUpTimeResult, 9, 1, 1, 3)
+                grid.addWidget(MainWindow.computerUpTimeResult, 9, 1, 1, 3)
                 grid.addWidget(self.computerCPULabel, 10, 2)
                 grid.addWidget(MainWindow.computerCPUCheckbox, 10,2)
                 grid.addWidget(self.computerCPUResult, 11, 2)
