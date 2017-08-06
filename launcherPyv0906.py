@@ -174,7 +174,6 @@ class computerModelThread(QThread):
     def run(self):
         hostname = readHostThread.currentHost
         while self.exiting == False:
-            print "start model thread"
             getModel = subprocess.Popen(["wmic", "/node:", hostname, "csproduct", "get", "name"], shell=True,stdout=subprocess.PIPE)
             getModel.wait()
             getModel = getModel.stdout.read()
