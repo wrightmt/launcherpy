@@ -1,11 +1,19 @@
-import sys, re
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+import sys, re, thread
 from PySide.QtGui import *
 from PySide.QtCore import *
 from dateutil.parser import parse
 from time import time, sleep, localtime
 from datetime import datetime, timedelta
 import subprocess
+from subprocess import call
 import socket
+import csv
+import wmi
+import pythoncom
+import win32net
+import win32api
 
 
 class MySignal(QObject):
@@ -19,7 +27,6 @@ class readHostThread(QThread):
 
         def run(self):
                 readHostThread.currentHost = str(MainWindow.hostCombo.currentText())
-                print readHostThread.currentHost
                 # add to history
                 process = subprocess.Popen(["ping", "-n", "1", readHostThread.currentHost], shell=True, stdout=subprocess.PIPE)
                 process.wait()
@@ -29,37 +36,37 @@ class readHostThread(QThread):
                 m = r.search(result_str)
                 if m or response == 1:
                     MainWindow.statusBar.showMessage("Offline")
-
                 else:
                     # Set initial labels
-                    MainWindow.statusBar.showMessage("Online - Getting info...")
-                    MainWindow.userEdit.setText('######################################################')
+                    #MainWindow.statusBar.showMessage("Online - Getting info...")
+                    clearWindowDown = u'▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼'
+                    MainWindow.userEdit.setText(clearWindowDown)
                     sleep(.03)
-                    MainWindow.fullNameEdit.setText('######################################################')
+                    MainWindow.fullNameEdit.setText(clearWindowDown)
                     sleep(.01)
                     MainWindow.userEdit.setText(' ')
                     sleep(.01)
-                    MainWindow.computerModelResult.setText('####################################')
+                    MainWindow.computerModelResult.setText(clearWindowDown)
                     sleep(.01)
                     MainWindow.fullNameEdit.setText(' ')
                     sleep(.01)
-                    MainWindow.computerSerialResult.setText('####################################')
+                    MainWindow.computerSerialResult.setText(clearWindowDown)
                     sleep(.01)
                     MainWindow.computerModelResult.setText(' ')
                     sleep(.01)
-                    MainWindow.computerIPAddressResult.setText('####################################')
+                    MainWindow.computerIPAddressResult.setText(clearWindowDown)
                     sleep(.01)
                     MainWindow.computerSerialResult.setText(' ')
                     sleep(.01)
-                    MainWindow.computerMACResult.setText('####################################')
+                    MainWindow.computerMACResult.setText(clearWindowDown)
                     sleep(.01)
                     MainWindow.computerIPAddressResult.setText(' ')
                     sleep(.01)
-                    MainWindow.computerOSVersionResult.setText('####################################')
+                    MainWindow.computerOSVersionResult.setText(clearWindowDown)
                     sleep(.01)
                     MainWindow.computerMACResult.setText(' ')
                     sleep(.01)
-                    MainWindow.computerUpTimeResult.setText('####################################')
+                    MainWindow.computerUpTimeResult.setText(clearWindowDown)
                     sleep(.01)
                     MainWindow.computerOSVersionResult.setText(' ')
                     sleep(.01)
@@ -69,6 +76,7 @@ class readHostThread(QThread):
                     MainWindow.computerModel.start()
                     MainWindow.computerCPU.start()
                     MainWindow.computerMEM.start()
+
                 self.exiting=True
                 self.signal.sig.emit('OK')
 
@@ -84,38 +92,26 @@ class readUserThread(QThread):
         while self.exiting == False:
             currentUser = subprocess.Popen(["wmic", "/node:", hostname, "ComputerSystem", "get", "Username"], shell=True,stdout=subprocess.PIPE)
             currentUser.wait()
-            #response = currentUser.returncode
             currentUserData = currentUser.stdout.read()
-            print currentUserData
             currentUserData = currentUserData.rpartition('\\')[-1]
             currentUserData = currentUserData.rstrip()
-            print currentUserData
             MainWindow.userEdit.setText(currentUserData)
+            readUserThread.currentUserData = currentUserData
             getFullName = subprocess.Popen(["net", "user", currentUserData, "/domain"], shell=True,stdout=subprocess.PIPE)
             getFullName.wait()
             getFullName = getFullName.stdout.read()
-            print getFullName
             string = re.findall(r'Name\s*(.*?)\r\nComment', getFullName)
             string = str(string)
-
             plainName = re.findall('\S+', string)
-            print string
-
             plainName = ' '.join(plainName)
             plainName = plainName.strip("['']")
-            print plainName
-            MainWindow.fullNameEdit.setText(plainName)
-            #plainName = str(plainName)
-            #print plainName
-
-            #MainWindow.userDetail.appendPlainText(getFullName)
-            #MainWindow.userDetail.setText(getFullName)
-
-
-
+            readUserThread.plainName = plainName
+            MainWindow.fullNameEdit.setText(readUserThread.plainName)
+            #print readUserThread.plainName
             self.signal.sig.emit('OK')
             self.exiting = True
         self.exiting = False
+
 
 class userDetailThread(QThread):
     def __init__(self, parent=None):
@@ -133,11 +129,8 @@ class userDetailThread(QThread):
             getFullName.wait()
             getFullName = getFullName.stdout.read()
             MainWindow.userDetailData = getFullName
-            #print getFullName
-            #MainWindow.userDetailWindow.appendPlainText(getFullName)
             self.signal.sig.emit('OK')
             self.exiting = True
-
 
 class computerCPUThread(QThread):
         def __init__(self, parent=None):
@@ -167,6 +160,7 @@ class computerCPUThread(QThread):
                             self.exiting = False
                         else:
                             self.exiting = True
+                        MainWindow.hostLogonCheck()
                 self.signal.sig.emit('OK')
                 self.exiting = False
 
@@ -227,9 +221,7 @@ class computerModelThread(QThread):
             getOSBuildNumber = getOSBuildNumber.split(' ', 1)[1]
             getOSBuildNumber = getOSBuildNumber.strip()
             computerOSString = getOSCaption +' '+ getOSArch +' '+ getOSBuildNumber
-            print computerOSString
             MainWindow.computerOSVersionResult.setText(computerOSString)
-            #http://www.lfd.uci.edu/~gohlke/pythonlibs/#python-dateutil
             getUpTime = subprocess.Popen(["wmic", "/node:", hostname, "os", "get", "LastBootUpTime"], shell=True,stdout=subprocess.PIPE)
             getUpTime.wait()
             getUpTime = getUpTime.stdout.read()
@@ -242,7 +234,29 @@ class computerModelThread(QThread):
             totuptime = totuptime.split('.')[0]
             MainWindow.computerUpTimeResult.setText(totuptime)
             ###WMIC BLOCK####
-            #self.signal.sig.emit('OK')
+            # Check/add current hostname to combobox
+            checklist = MainWindow.hostCombo.findText(readHostThread.currentHost, Qt.MatchFixedString)
+            if checklist == -1:
+                MainWindow.hostCombo.addItem(readHostThread.currentHost)
+            else:
+                pass
+            ###HISTORY###
+            historyNameItem = QTableWidgetItem(readUserThread.currentUserData)
+            timeStamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            historyHostItem = QTableWidgetItem(readHostThread.currentHost)
+            historyTimeStampItem = QTableWidgetItem(timeStamp)
+            MainWindow.history.insertRow(0)
+            MainWindow.history.setItem(0, 0, historyTimeStampItem)
+            MainWindow.history.setItem(0, 1, historyHostItem)
+            MainWindow.history.setItem(0, 2, historyNameItem)
+            # write to csv
+            #print readUserThread.currentUserData
+            historyUpdateString = timeStamp+","+readHostThread.currentHost+","+readUserThread.currentUserData+","+ '\n'
+            #
+            # update the history file
+            fd = open('history.csv', 'a')
+            fd.write(historyUpdateString)
+            fd.close()
             self.exiting = True
         self.exiting = False
 
@@ -277,7 +291,6 @@ class computerMEMThread(QThread):
             if response == 0:
                 MainWindow.computerMEMLabel.setFont(MainWindow.statusFontBold)
             else:
-                #MainWindow.computerMEMLabel.setBackground(QColor(6,253,60))
                 self.exiting = True
             availmemresult = availmem.stdout.read()
             availmemInt = re.findall('\d+', availmemresult)
@@ -287,6 +300,7 @@ class computerMEMThread(QThread):
             availmemInt = str(availmemInt)
             MainWindow.computerMEMResult.setText(availmemInt + '/' + totalmemInt+'MB')
             self.exiting = True
+            MainWindow.hostLogonCheck()
         self.signal.sig.emit('OK')
         self.exiting = False
 
@@ -319,32 +333,32 @@ class MainWindow(QWidget):
                 self.readHostButton.setAutoDefault(True)
                 self.readHost = readHostThread()
                 self.readHost.signal.sig.connect(self.readHostComplete)
+                # dumb ping process
+                self.process = QProcess(self)
+                self.process.readyRead.connect(self.dataReady)
+                #MainWindow.systemLocked = systemLockedThread()
+                #MainWindow.systemLocked.signal.sig.connect(MainWindow.systemLocked)
                 #
-                self.readHostHistoryButton = QPushButton('>')
+                self.readHostHistoryButton = QPushButton('History')
                 self.readHostHistoryButton.clicked.connect(self.readHostHistory)
                 #
                 # User widgets
                 self.userButton = QPushButton('User')
-                #self.userButton.clicked.connect(MainWindow.readUser()
                 MainWindow.userEdit = QLineEdit()
                 MainWindow.userEdit.setFont(MainWindow.resultFont)
                 MainWindow.readUser = readUserThread()
-                #self.userDetailButton = QPushButton('Details')
-                #self.userDetailButton.clicked.connect(self.readFullNameOperation)
-                #self.readUser = readUserThread()
                 #####################READ FULL NAME###################################
                 MainWindow.userDetailWindow = QPlainTextEdit()
                 MainWindow.userDetailWindow.setReadOnly(True)
-                #MainWindow.userDetailWindow.setOverwriteMode(True)
                 MainWindow.userDetailWindow.setWindowTitle('User Details')
-                MainWindow.userDetailWindow.resize(350, 550)
+                MainWindow.userDetailWindow.resize(400, 550)
                 MainWindow.userDetailButton = QPushButton('Details')
                 MainWindow.userDetailButton.clicked.connect(self.userDetailOperation)
                 self.userDetail = userDetailThread()
                 self.userDetail.signal.sig.connect(self.userDetailComplete)
                 ######################################################################
                 self.fullNameButton = QPushButton('Name')
-                self.fullNameButton.clicked.connect(self.readFullName)
+                #self.fullNameButton.clicked.connect(self.readFullName)
                 MainWindow.fullNameEdit = QLineEdit()
                 MainWindow.fullNameEdit.setFont(MainWindow.resultFont)
                 #
@@ -390,6 +404,8 @@ class MainWindow(QWidget):
                 MainWindow.computerCPUResult.setFont(MainWindow.statusFont)
                 MainWindow.computerCPUResult.setAlignment(Qt.AlignRight)
                 MainWindow.computerCPUCheckbox = QCheckBox()
+                MainWindow.computerCPUCheckboxLabel = QLabel('Monitor')
+                MainWindow.computerCPUCheckboxLabel.setAlignment(Qt.AlignCenter)
                 #
                 MainWindow.computerMEM = computerMEMThread()
                 MainWindow.computerMEM.signal.sig.connect(self.computerCPUComplete)
@@ -399,6 +415,8 @@ class MainWindow(QWidget):
                 MainWindow.computerMEMResult = QLabel('0/0MB')
                 MainWindow.computerMEMResult.setFont(MainWindow.statusFont)
                 MainWindow.computerMEMResult.setAlignment(Qt.AlignRight)
+                #
+                MainWindow.hostLogonCheck = self.hostLogonCheck
                 #
                 # Command widgets
                 #
@@ -429,14 +447,14 @@ class MainWindow(QWidget):
                 self.commandMessageButton = QPushButton('Message')
                 self.commandMessageButton.clicked.connect(self.commandMessage)
                 #
-                self.commandPingWindow = QLineEdit()
+                self.commandPingWindow = QTextEdit()
                 self.commandPingWindow.setMaximumHeight(70)
                 self.commandPingButton = QPushButton('Ping')
-                self.commandPingButton.clicked.connect(self.commandPing)
+                #self.pingThread = pingThread()
+                self.commandPingButton.clicked.connect(self.ping)
                 self.commandPingCheckboxLabel = QLabel('Continual')
                 self.commandPingCheckboxLabel.setAlignment(Qt.AlignCenter)
                 self.commandPingCheckbox = QCheckBox()
-                # self.commandPingCheckbox.setAlignment(Qt.AlignRight)
                 #
                 # Extras
                 #
@@ -445,12 +463,37 @@ class MainWindow(QWidget):
                 #
                 # Host history window
                 #
-                self.history = QTableWidget()
+                MainWindow.history = QTableWidget()
+                MainWindow.history.itemClicked.connect(self.historyHost)
                 self.history.setRowCount(200)
                 self.history.setColumnCount(3)
                 self.history.setWindowTitle('Host History')
-                self.history.resize(350, 550)
-                #
+                self.history.resize(400, 550)
+                self.historyColumnLabels = ["Viewed","Hostname","User"]
+                self.history.setHorizontalHeaderLabels(self.historyColumnLabels)
+
+                # import history.csv into table
+                # hacky bullshit to make it read in reverse
+                historyFile = "history.csv"
+                readHistoryFile = open(historyFile, "r")
+                lines = readHistoryFile.readlines()
+                MainWindow.history.tableRow = len(lines)
+                newRowNumber = 0
+                readHistoryFile.close()
+                with open('history.csv', 'r') as textfile:
+                    for row in reversed(list(csv.reader(textfile))):
+                        myList = [i.split(',')[0] for i in row]
+                        viewed = myList[0]
+                        host = myList[1]
+                        user = myList[2]
+                        viewedItem = QTableWidgetItem(viewed)
+                        hostItem = QTableWidgetItem(host)
+                        userItem = QTableWidgetItem(user)
+                        MainWindow.history.setItem(newRowNumber,0,viewedItem)
+                        MainWindow.history.setItem(newRowNumber, 1, hostItem)
+                        MainWindow.history.setItem(newRowNumber, 2, userItem)
+                        newRowNumber += 1
+                self.history.horizontalHeader().setResizeMode(QHeaderView.Stretch)
                 # User details window
                 #
                 # Set layout
@@ -480,6 +523,7 @@ class MainWindow(QWidget):
                 grid.addWidget(MainWindow.computerUpTimeResult, 9, 1, 1, 3)
                 grid.addWidget(self.computerCPULabel, 10, 2)
                 grid.addWidget(MainWindow.computerCPUCheckbox, 10,2)
+                grid.addWidget(MainWindow.computerCPUCheckboxLabel, 10,1)
                 grid.addWidget(self.computerCPUResult, 11, 2)
                 grid.addWidget(self.computerMEMLabel, 10, 3)
                 grid.addWidget(self.computerMEMResult, 11, 3)
@@ -499,12 +543,6 @@ class MainWindow(QWidget):
                 grid.addWidget(self.statusBar, 23, 0, 1, 4)
                 #
                 # Setup initial state
-                #checkTextPresent = str(MainWindow.userEdit.text())
-                #if checkTextPresent:
-                #    self.userDetailButton.setEnabled(True)
-                #else:
-                #    self.userDetailButton.setEnabled(False)
-
                 self.statusBar.showMessage('Ready')
                 #
                 #
@@ -512,7 +550,6 @@ class MainWindow(QWidget):
             if not self.readHost.isRunning():
                 self.readHost.exiting = False
                 self.readHost.start()
-                #self.computerCPU.start()
                 self.statusBar.showMessage('Pinging...')
                 self.readHostButton.setEnabled(False)
 
@@ -538,25 +575,32 @@ class MainWindow(QWidget):
                 MainWindow.userDetailWindow.move(x, y)
                 if not self.userDetail.isRunning():
                     self.userDetail.exiting = False
-                    #MainWindow.userDetailWindow.clear()
                     self.userDetail.start()
                     MainWindow.userDetailWindow.show()
-                    #print userDetailThread.getFullName
-
-
 
         def userDetailComplete(self):
             MainWindow.userDetailWindow.appendPlainText(MainWindow.userDetailData)
             MainWindow.userDetailWindow.moveCursor(QTextCursor.Start)
 
-        #def computerModelComplete(self):
-        #    print "end model"
-        #    print computerModelThread.getModel
-        #    MainWindow.computerModelResult.setText(computerModelThread.getModel.text())
-
         def readHostComplete(self):
-            self.statusBar.showMessage('Complete')
+            #self.statusBar.showMessage('Complete')
             self.readHostButton.setEnabled(True)
+            #self.hostLogonCheck()
+
+        #@Slot()
+        def hostLogonCheck(self):
+            pythoncom.CoInitialize()
+            hostLogonCheck = wmi.WMI(self.hostCombo.currentText())
+            procList = list()
+            for process in hostLogonCheck.Win32_Process():
+                checkProcessName = process.Name
+                procList.append(checkProcessName)
+            newProcList = str(procList)
+            logonProc = "LogonUI.exe"
+            if logonProc in newProcList:
+                MainWindow.statusBar.showMessage("Online - Locked")
+            else:
+                MainWindow.statusBar.showMessage("Online - Unlocked")
 
         def computerCPUComplete(self):
             #self.statusBar.showMessage('Complete')
@@ -578,22 +622,39 @@ class MainWindow(QWidget):
                 y = int(y)
                 self.history.move(x, y)
                 self.history.show()
+                self.history.setSortingEnabled(False)
+                #self.history.sortItems(0, Qt.AscendingOrder)
+                #self.history.sortItems(1, Qt.AscendingOrder)
+                #self.history.sortItems(2, Qt.AscendingOrder)
+                #self.history.sortItems(0[, order=AscendingOrder])
 
-        @Slot()
-        def readUser(self):
-            ()
+        def historyHost(self, item):
+            # Takes the item from the history and sets it as host
+            updateHost = item.text()
+            #print MainWindow.hostCombo.currentIndex
+            #MainWindow.hostCombo.InsertPolicy.InsertAtTop
+            #MainWindow.hostCombo.insertItem(0, updateHost)
+            #MainWindow.hostCombo.itemData(0)
+            MainWindow.hostCombo.setEditText(updateHost)
 
-        @Slot()
-        def readFullName(self):
-            ()
+
 
         @Slot()
         def commandCDrive(self):
-            ()
+            hostname = str(self.hostCombo.currentText())
+            try:
+                cdrivepath = "\\\%s\c$" % hostname
+                subprocess.Popen(r"explorer /open,%s" % cdrivepath)
+            except Exception:
+                pass
 
         @Slot()
         def commandHDrive(self):
-            ()
+            try:
+                hdrivepath = "\\tacfil02\users\%s" % MainWindow.userEdit.text()
+                subprocess.Popen(r"explorer /open,\%s" % hdrivepath)
+            except Exception:
+                pass
 
         @Slot()
         def commandDesktop(self):
@@ -601,7 +662,14 @@ class MainWindow(QWidget):
 
         @Slot()
         def commandReboot(self):
-            ()
+            hostname = str(self.hostCombo.currentText())
+            c = wmi.WMI(computer=hostname, privileges=["RemoteShutdown"])
+            os = c.Win32_OperatingSystem(Primary=1)[0]
+            reply = QMessageBox.question(self, 'Are you sure?', "Really reboot %s?" % hostname,QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+            if reply == QMessageBox.Yes:
+                os.Reboot()
+            else:
+                pass
 
         @Slot()
         def commandRemote(self):
@@ -623,9 +691,27 @@ class MainWindow(QWidget):
         def commandMessage(self):
             ()
 
+        def ping(self):
+            # start ping process one time or continual, kill process on start. Not sure if this is working correctly
+            hostname = str(self.hostCombo.currentText())
+            self.commandPingWindow.clear()
+            self.process.kill()
+            if self.commandPingCheckbox.isChecked() == True:
+                self.process.start("ping", ["-t", hostname])
+            else:
+                self.process.start("ping", [hostname])
+
+        def dataReady(self):
+            cursor = self.commandPingWindow.textCursor()
+            cursor.movePosition(cursor.End)
+            cursor.insertText(str(self.process.readAll()))
+            self.commandPingWindow.ensureCursorVisible()
+
         @Slot()
         def commandPing(self):
-            print(self.pos())
+            if not self.pingThread.isRunning():
+                self.pingThread.exiting = False
+                self.pingThread.start()
 
 
 if __name__=='__main__':
